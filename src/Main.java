@@ -1,30 +1,38 @@
+// Main.java (Client Side)
 import auth.LoginManager;
 import exercise.ExerciseController;
-import exercise.ExerciseModel;
 import exercise.ExerciseView;
 import order.OrderController;
-import order.OrderModel;
 import order.OrderView;
 import payment.PaymentController;
 import payment.PaymentView;
 import supplement.*;
 import user.*;
 import workout.*;
-import workout.models.WorkoutPlanModel;
+import client.Client;
 
 public class Main {
-    private static WorkoutPlanController workoutPlanController;
     private static WorkoutPlanView workoutPlanView;
+    private static Client networkClient;
 
     public static void main(String[] args) {
-        // Initialize necessary classes
-        UserModel userModel = new UserModel();
-        UserController userController = new UserController(userModel);
+        // Initialize network client
+        try {
+            networkClient = new Client();
+            networkClient.connect();
+            System.out.println("Connected to server successfully!");
+        } catch (Exception e) {
+            System.out.println("Failed to connect to server: " + e.getMessage());
+            System.exit(1);
+        }
+
+        // Initialize controllers with network client instead of models
+        UserController userController = new UserController();  // Modified constructor
         LoginManager loginManager = new LoginManager(userController);
         UserView userView = new UserView(userController, loginManager);
 
         // Initialize workout plan components
-        initializeWorkoutPlanComponents(userModel);
+        initializeWorkoutPlanComponents();
 
         while (true) {  // Main application loop
             // Check for auto-login
@@ -53,6 +61,7 @@ public class Main {
                         authenticated = userView.displayLoginForm();
                         break;
                     case 3:
+                        networkClient.disconnect();  // Clean disconnect from server
                         System.out.println("Goodbye!");
                         System.exit(0);
                         break;
@@ -63,26 +72,24 @@ public class Main {
         }
     }
 
-    private static void initializeWorkoutPlanComponents(UserModel userModel) {
-        WorkoutPlanModel workoutPlanModel = new WorkoutPlanModel();
-        workoutPlanController = new WorkoutPlanController(workoutPlanModel, userModel);
+    private static void initializeWorkoutPlanComponents() {
+        // Initialize with network-aware controller
+        WorkoutPlanController workoutPlanController = new WorkoutPlanController();  // No model needed anymore
         workoutPlanView = new WorkoutPlanView();
         workoutPlanController.setView(workoutPlanView);
     }
 
     private static boolean displayMainMenu(UserView userView, LoginManager loginManager, UserController userController) {
-        // Initialize shared controllers once
-        SupplementModel supplementModel = new SupplementModel();
-        SupplementController supplementController = new SupplementController(supplementModel);
-        OrderModel orderModel = new OrderModel();
+        // Initialize controllers with network awareness instead of direct model access
+        // In displayMainMenu method
+        SupplementController supplementController = new SupplementController();
 
         // Initialize payment components
         PaymentController paymentController = new PaymentController();
         PaymentView paymentView = new PaymentView(paymentController);
 
-        // Create order controller with payment controller
+        // Create order controller with payment controller and user ID
         OrderController orderController = new OrderController(
-                orderModel,
                 paymentController,
                 userController.getCurrentUser().getUserID()
         );
@@ -102,14 +109,13 @@ public class Main {
 
             switch (option) {
                 case 1:
-                    // Display workout plan menu with current user's ID
                     workoutPlanView.displayWorkoutMenu(userController.getCurrentUser().getUserID());
                     break;
                 case 2:
-                    ExerciseModel exerciseModel = new ExerciseModel();
                     ExerciseView exerciseView = new ExerciseView();
-                    ExerciseController exerciseController = new ExerciseController(exerciseModel, exerciseView);
+                    ExerciseController exerciseController = new ExerciseController();
                     exerciseView.setController(exerciseController);
+                    exerciseController.setView(exerciseView);
                     exerciseView.displayExerciseMenu();
                     break;
                 case 3:
@@ -130,6 +136,7 @@ public class Main {
                     System.out.println("Logged out successfully.");
                     return true;
                 case 7:
+                    networkClient.disconnect();  // Clean disconnect from server
                     System.out.println("Exiting the app. Goodbye!");
                     System.exit(0);
                     break;

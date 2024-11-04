@@ -12,53 +12,12 @@ import supplement.SupplementController;
 public class OrderView {
     private final OrderController orderController;
     private final SupplementController supplementController;
-    private final PaymentView paymentView;
     private final Scanner scanner;
 
     public OrderView(OrderController orderController, SupplementController supplementController, PaymentView paymentView) {
         this.orderController = orderController;
         this.supplementController = supplementController;
-        this.paymentView = paymentView;
         this.scanner = new Scanner(System.in);
-    }
-
-    public int createOrder(int userID, List<OrderSupplement> items) {
-        System.out.print("Enter delivery location: ");
-        String deliveryLocation = scanner.nextLine().trim();
-
-        // Get payment method from user
-        System.out.println("\nSelect Payment Method:");
-        System.out.println("1. Credit Card");
-        System.out.println("2. Debit Card");
-        System.out.println("3. PayPal");
-        System.out.print("Choose payment method: ");
-
-        try {
-            int paymentChoice = Integer.parseInt(scanner.nextLine().trim());
-            String paymentType = switch (paymentChoice) {
-                case 1 -> "Credit Card";
-                case 2 -> "Debit Card";
-                case 3 -> "PayPal";
-                default -> null;
-            };
-
-            if (paymentType == null) {
-                System.out.println("Invalid payment method selected.");
-                return -1;
-            }
-
-            int orderID = orderController.createOrder(items, deliveryLocation, paymentType);
-            if (orderID != -1) {
-                System.out.println("Order created and payment processed successfully!");
-                return orderID;
-            } else {
-                System.out.println("Failed to create order or process payment.");
-                return -1;
-            }
-        } catch (NumberFormatException e) {
-            System.out.println("Invalid input. Order cancelled.");
-            return -1;
-        }
     }
 
     public void displayOrderMenu(int userID) { // Pass userID as a parameter

@@ -9,11 +9,13 @@ import java.text.SimpleDateFormat;
 import java.util.List;
 
 public class WorkoutPlanView {
+    // Declare these as final fields
     private final SimpleDateFormat dateFormat;
     private final Scanner scanner;
     private WorkoutPlanController workoutController;
 
     public WorkoutPlanView() {
+        // Initialize in constructor
         this.dateFormat = new SimpleDateFormat("MMM dd, yyyy");
         this.scanner = new Scanner(System.in);
     }

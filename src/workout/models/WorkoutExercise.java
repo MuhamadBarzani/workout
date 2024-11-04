@@ -1,6 +1,11 @@
 package workout.models;
 
-public class WorkoutExercise {
+import java.io.Serial;
+import java.io.Serializable;
+
+public class WorkoutExercise implements Serializable {
+    @Serial
+    private static final long serialVersionUID = 1L;
     private int exerciseId;
     private String exerciseName;
     private String bodyTargeted;
@@ -26,10 +31,6 @@ public class WorkoutExercise {
 
     public void setExerciseName(String exerciseName) {
         this.exerciseName = exerciseName;
-    }
-
-    public String getBodyTargeted() {
-        return bodyTargeted;
     }
 
     public void setBodyTargeted(String bodyTargeted) {

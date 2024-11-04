@@ -42,41 +42,6 @@ public class PaymentView {
         }
     }
 
-    public boolean processOrderPayment(int userID, int orderID) {
-        System.out.println("\nPayment Processing");
-        System.out.println("Available Payment Methods:");
-        System.out.println("1. Credit Card");
-        System.out.println("2. Debit Card");
-        System.out.println("3. PayPal");
-        System.out.print("Choose payment method: ");
-
-        try {
-            int choice = Integer.parseInt(scanner.nextLine().trim());
-            String paymentType = switch (choice) {
-                case 1 -> "Credit Card";
-                case 2 -> "Debit Card";
-                case 3 -> "PayPal";
-                default -> null;
-            };
-
-            if (paymentType == null) {
-                System.out.println("Invalid payment method selected.");
-                return false;
-            }
-
-            if (paymentController.processPayment(userID, orderID, paymentType)) {
-                System.out.println("Payment processed successfully!");
-                return true;
-            } else {
-                System.out.println("Payment processing failed. Please try again.");
-                return false;
-            }
-        } catch (NumberFormatException e) {
-            System.out.println("Invalid input. Payment cancelled.");
-            return false;
-        }
-    }
-
     private void displayPaymentHistory(int userID) {
         List<PaymentMethod> payments = paymentController.getUserPayments(userID);
         if (payments.isEmpty()) {

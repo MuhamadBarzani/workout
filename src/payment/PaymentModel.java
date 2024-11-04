@@ -1,6 +1,6 @@
 package payment;
 
-import auth.DatabaseManager;
+import server.DatabaseManager;
 import java.sql.*;
 import java.util.ArrayList;
 import java.util.List;
@@ -9,7 +9,6 @@ public class PaymentModel {
     private static final String INSERT_PAYMENT = "INSERT INTO paymentmethods (userID, orderID, paymentType, paymentDate) VALUES (?, ?, ?, ?)";
     private static final String DELETE_PAYMENT = "DELETE FROM paymentmethods WHERE paymentID = ?";
     private static final String SELECT_USER_PAYMENTS = "SELECT * FROM paymentmethods WHERE userID = ?";
-    private static final String SELECT_ORDER_PAYMENT = "SELECT * FROM paymentmethods WHERE orderID = ?";
 
     public boolean addPayment(PaymentMethod payment) {
         try (Connection conn = DatabaseManager.getInstance().getConnection();
@@ -22,7 +21,8 @@ public class PaymentModel {
 
             return stmt.executeUpdate() > 0;
         } catch (SQLException e) {
-            System.out.println("Error adding payment: " + e.getMessage());
+            System.out.println("Detailed error processing payment: " + e.getMessage());
+            e.printStackTrace();
             return false;
         }
     }
@@ -54,22 +54,6 @@ public class PaymentModel {
             System.out.println("Error retrieving payments: " + e.getMessage());
         }
         return payments;
-    }
-
-    public PaymentMethod getOrderPayment(int orderID) {
-        try (Connection conn = DatabaseManager.getInstance().getConnection();
-             PreparedStatement stmt = conn.prepareStatement(SELECT_ORDER_PAYMENT)) {
-
-            stmt.setInt(1, orderID);
-            ResultSet rs = stmt.executeQuery();
-
-            if (rs.next()) {
-                return createPaymentFromResultSet(rs);
-            }
-        } catch (SQLException e) {
-            System.out.println("Error retrieving order payment: " + e.getMessage());
-        }
-        return null;
     }
 
     private PaymentMethod createPaymentFromResultSet(ResultSet rs) throws SQLException {

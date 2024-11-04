@@ -1,7 +1,10 @@
-// Supplement.java
 package supplement;
 
-public class Supplement {
+import java.io.Serializable;
+
+public class Supplement implements Serializable {
+    private static final long serialVersionUID = 1L;
+
     private int supplementID;
     private String name;
     private String category;
@@ -9,11 +12,11 @@ public class Supplement {
     private int quantityAvailable;
     private String description;
 
-    // Constructors
+    // Default constructor for serialization
     public Supplement() {}
 
-    public Supplement(int supplementID, String name, String category, double price,
-                      int quantityAvailable, String description) {
+    public Supplement(int supplementID, String name, String category,
+                      double price, int quantityAvailable, String description) {
         this.supplementID = supplementID;
         this.name = name;
         this.category = category;
@@ -22,52 +25,16 @@ public class Supplement {
         this.description = description;
     }
 
-    // Getters and Setters
-    public int getSupplementID() {
-        return supplementID;
-    }
+    // Getters and setters
+    public int getSupplementID() { return supplementID; }
 
-    public void setSupplementID(int supplementID) {
-        this.supplementID = supplementID;
-    }
+    public String getName() { return name; }
 
-    public String getName() {
-        return name;
-    }
+    public String getCategory() { return category; }
 
-    public void setName(String name) {
-        this.name = name;
-    }
+    public double getPrice() { return price; }
 
-    public String getCategory() {
-        return category;
-    }
+    public int getQuantityAvailable() { return quantityAvailable; }
 
-    public void setCategory(String category) {
-        this.category = category;
-    }
-
-    public double getPrice() {
-        return price;
-    }
-
-    public void setPrice(double price) {
-        this.price = price;
-    }
-
-    public int getQuantityAvailable() {
-        return quantityAvailable;
-    }
-
-    public void setQuantityAvailable(int quantityAvailable) {
-        this.quantityAvailable = quantityAvailable;
-    }
-
-    public String getDescription() {
-        return description;
-    }
-
-    public void setDescription(String description) {
-        this.description = description;
-    }
+    public String getDescription() { return description; }
 }

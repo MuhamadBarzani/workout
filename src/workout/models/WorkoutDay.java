@@ -1,18 +1,16 @@
 package workout.models;
 
+import java.io.Serializable;
 import java.util.List;
 
-public class WorkoutDay {
+public class WorkoutDay implements Serializable {
+    private static final long serialVersionUID = 1L;
     private int dayId;
     private int dayNumber;
     private String bodyPart;
     private List<WorkoutExercise> exercises;
 
     // Getters and setters
-
-    public int getDayId() {
-        return dayId;
-    }
 
     public void setDayId(int dayId) {
         this.dayId = dayId;

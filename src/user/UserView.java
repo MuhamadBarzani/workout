@@ -6,9 +6,9 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 public class UserView {
-    private UserController userController;
-    private LoginManager loginManager;
-    private Scanner scanner;
+    private final UserController userController;
+    private final LoginManager loginManager;
+    private final Scanner scanner;
 
     public UserView(UserController userController, LoginManager loginManager) {
         this.userController = userController;
@@ -65,9 +65,11 @@ public class UserView {
 
             System.out.print("Enter workout preference: ");
             String workoutPreference = scanner.nextLine();
-
-            return loginManager.registerUser(username, password, email, age, height, weight,
-                    workoutPreference);
+            System.out.println("\nDo you have any injuries or physical limitations?");
+            System.out.println("(Enter body parts separated by commas, or press Enter if none)");
+            System.out.println("Example: shoulder, knee");
+            String injuryInfo = scanner.nextLine().trim();
+            return loginManager.registerUser(username, password, email, age, height, weight, workoutPreference, injuryInfo);
 
         } catch (NumberFormatException e) {
             System.out.println("Invalid input format. Please enter numeric values for age, height, and weight.");
@@ -141,30 +143,113 @@ public class UserView {
     }
 
     private void updateProfile() {
-        try {
-            System.out.print("Enter new email: ");
-            String newEmail = scanner.nextLine();
+        while (true) {
+            System.out.println("\nSelect information to update:");
+            System.out.println("1. Email");
+            System.out.println("2. Age");
+            System.out.println("3. Height");
+            System.out.println("4. Weight");
+            System.out.println("5. Workout Preference");
+            System.out.println("6. Injury Information");
+            System.out.println("7. Back to Profile Menu");
+            System.out.print("Enter your choice: ");
 
-            System.out.print("Enter new age: ");
-            int newAge = Integer.parseInt(scanner.nextLine());
-
-            System.out.print("Enter new height (in cm): ");
-            double newHeight = Double.parseDouble(scanner.nextLine());
-
-            System.out.print("Enter new weight (in kg): ");
-            double newWeight = Double.parseDouble(scanner.nextLine());
-
-            System.out.print("Enter new workout preference: ");
-            String newWorkoutPreference = scanner.nextLine();
-
-            if (userController.updateUserProfile(newEmail, newAge, newHeight, newWeight,
-                    newWorkoutPreference)) {
-                System.out.println("Profile updated successfully.");
-            } else {
-                System.out.println("Error updating profile.");
+            try {
+                int choice = Integer.parseInt(scanner.nextLine().trim());
+                switch (choice) {
+                    case 1:
+                        System.out.print("Enter new email: ");
+                        String newEmail = scanner.nextLine();
+                        if (userController.updateUserProfile("email", newEmail)) {
+                            System.out.println("Email updated successfully.");
+                        } else {
+                            System.out.println("Error updating email.");
+                        }
+                        break;
+                    case 2:
+                        System.out.print("Enter new age: ");
+                        int newAge = Integer.parseInt(scanner.nextLine());
+                        if (userController.updateUserProfile("age", String.valueOf(newAge))) {
+                            System.out.println("Age updated successfully.");
+                        } else {
+                            System.out.println("Error updating age.");
+                        }
+                        break;
+                    case 3:
+                        System.out.print("Enter new height (in cm): ");
+                        double newHeight = Double.parseDouble(scanner.nextLine());
+                        if (userController.updateUserProfile("height", String.valueOf(newHeight))) {
+                            System.out.println("Height updated successfully.");
+                        } else {
+                            System.out.println("Error updating height.");
+                        }
+                        break;
+                    case 4:
+                        System.out.print("Enter new weight (in kg): ");
+                        double newWeight = Double.parseDouble(scanner.nextLine());
+                        if (userController.updateUserProfile("weight", String.valueOf(newWeight))) {
+                            System.out.println("Weight updated successfully.");
+                        } else {
+                            System.out.println("Error updating weight.");
+                        }
+                        break;
+                    case 5:
+                        System.out.print("Enter new workout preference: ");
+                        String newWorkoutPreference = scanner.nextLine();
+                        if (userController.updateUserProfile("workoutPreference", newWorkoutPreference)) {
+                            System.out.println("Workout preference updated successfully.");
+                        } else {
+                            System.out.println("Error updating workout preference.");
+                        }
+                        break;
+                    case 6:
+                        System.out.println("\nSelect the body part with injury (or 'none' if no injury):");
+                        System.out.println("1. Arms");
+                        System.out.println("2. Legs");
+                        System.out.println("3. Core");
+                        System.out.println("4. Shoulders");
+                        System.out.println("5. Back");
+                        System.out.println("6. None");
+                        System.out.print("Enter your choice: ");
+                        int injuryChoice = Integer.parseInt(scanner.nextLine().trim());
+                        String injuryPart = "";
+                        switch (injuryChoice) {
+                            case 1:
+                                injuryPart = "Arms";
+                                break;
+                            case 2:
+                                injuryPart = "Legs";
+                                break;
+                            case 3:
+                                injuryPart = "Core";
+                                break;
+                            case 4:
+                                injuryPart = "Shoulders";
+                                break;
+                            case 5:
+                                injuryPart = "Back";
+                                break;
+                            case 6:
+                                injuryPart = "None";
+                                break;
+                            default:
+                                System.out.println("Invalid choice. Skipping injury update.");
+                                continue;
+                        }
+                        if (userController.updateUserProfile("injuryInfo", injuryPart)) {
+                            System.out.println("Injury information updated successfully.");
+                        } else {
+                            System.out.println("Error updating injury information.");
+                        }
+                        break;
+                    case 7:
+                        return;
+                    default:
+                        System.out.println("Invalid choice. Please try again.");
+                }
+            } catch (NumberFormatException e) {
+                System.out.println("Invalid input. Please enter a valid number.");
             }
-        } catch (NumberFormatException e) {
-            System.out.println("Invalid input format. Please enter numeric values for age, height, and weight.");
         }
     }
 

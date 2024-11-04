@@ -1,68 +1,70 @@
 // UserController.java
 package user;
 
+import client.Client;
+import server.ServerResponse;
+import com.google.gson.Gson;
+
+import java.io.IOException;
+
 public class UserController {
-    private UserModel model;
-    private User currentUser;  // Added to maintain current user state
+    private final Client client;
+    private User currentUser;
+    private final Gson gson;
 
-    public UserController(UserModel model) {
-        this.model = model;
-        this.currentUser = null;
-    }
-
-    public boolean saveUser(String username, String password, String email, int age,
-                            double height, double weight, String workoutPreference) {
-        User newUser = new User();
-        newUser.setUsername(username);
-        newUser.setPassword(password);
-        newUser.setEmail(email);
-        newUser.setAge(age);
-        newUser.setHeight(height);
-        newUser.setWeight(weight);
-        newUser.setWorkoutPreference(workoutPreference);
-
-        boolean success = model.createUser(newUser);
-        if (success) {
-            currentUser = newUser;
+    public UserController() {
+        this.client = new Client();
+        this.gson = new Gson();
+        try {
+            this.client.connect();
+        } catch (IOException e) {
+            System.out.println("Failed to connect to server: " + e.getMessage());
         }
-        return success;
     }
 
-    public User getUserProfile(String email) {
-        // Use model to fetch user data
-        User user = model.getUserByEmail(email);
-        if (user != null) {
-            currentUser = user;  // Update current user if found
-        }
-        return user;
-    }
-
-    public boolean updateUserProfile(String email, int age, double height,
-                                     double weight, String workoutPreference) {
+    public boolean updateUserProfile(String field, String value) {
         if (currentUser != null) {
-            currentUser.setEmail(email);
-            currentUser.setAge(age);
-            currentUser.setHeight(height);
-            currentUser.setWeight(weight);
-            currentUser.setWorkoutPreference(workoutPreference);
+            switch (field) {
+                case "email":
+                    currentUser.setEmail(value);
+                    break;
+                case "age":
+                    currentUser.setAge(Integer.parseInt(value));
+                    break;
+                case "height":
+                    currentUser.setHeight(Double.parseDouble(value));
+                    break;
+                case "weight":
+                    currentUser.setWeight(Double.parseDouble(value));
+                    break;
+                case "workoutPreference":
+                    currentUser.setWorkoutPreference(value);
+                    break;
+                case "injuryInfo":
+                    currentUser.setInjuryInfo(value);
+                    break;
+                default:
+                    return false;
+            }
 
-            return model.updateUser(currentUser);
+            ServerResponse response = client.sendRequest("UPDATE_USER", currentUser);
+            return response.isSuccess();
         }
         return false;
     }
 
     public boolean deleteUser() {
         if (currentUser != null) {
-            boolean success = model.deleteUser(currentUser.getUserID());
-            if (success) {
-                currentUser = null;  // Clear current user if deletion successful
+            ServerResponse response = client.sendRequest("DELETE_USER", currentUser.getUserID());
+            if (response.isSuccess()) {
+                currentUser = null;
             }
-            return success;
+            return response.isSuccess();
         }
         return false;
     }
 
-    // Added methods to manage current user state
+    // Existing methods remain the same
     public void setCurrentUser(User user) {
         this.currentUser = user;
     }
@@ -71,7 +73,4 @@ public class UserController {
         return currentUser;
     }
 
-    public boolean hasCurrentUser() {
-        return currentUser != null;
-    }
 }

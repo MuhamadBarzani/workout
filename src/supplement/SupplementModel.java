@@ -2,7 +2,7 @@
 // SupplementModel.java
 package supplement;
 
-import auth.DatabaseManager;
+import server.DatabaseManager;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;

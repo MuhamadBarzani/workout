@@ -2,10 +2,10 @@ package auth;
 
 import user.User;
 import user.UserController;
-import java.io.FileWriter;
-import java.io.BufferedReader;
-import java.io.FileReader;
-import java.io.IOException;
+import client.Client;
+import server.ServerResponse;
+import com.google.gson.Gson;
+import java.io.*;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.security.MessageDigest;
@@ -15,48 +15,66 @@ import java.util.Base64;
 public class LoginManager {
     private static final String SESSION_FILE = "session.txt";
     private final UserController userController;
+    private final Client client;
+    private final Gson gson;
     private String currentUsername;
 
     public LoginManager(UserController userController) {
         this.userController = userController;
+        this.client = new Client();
+        this.gson = new Gson();
+        try {
+            this.client.connect();
+        } catch (IOException e) {
+            System.out.println("Failed to connect to server: " + e.getMessage());
+        }
     }
 
     public boolean authenticateUser(String email, String password) {
-        // Get user by email using controller
-        User user = userController.getUserProfile(email);
+        try {
+            // Create authentication request
+            AuthRequest authRequest = new AuthRequest(email, hashPassword(password));
+            ServerResponse response = client.sendRequest("AUTHENTICATE_USER", authRequest);
 
-        if (user != null && verifyPassword(password, user.getPassword())) {
-            currentUsername = user.getUsername();
-            userController.setCurrentUser(user);
-            saveSession(user.getEmail());
-            return true;
-        } else {
-            System.out.println("Invalid login credentials.");
-            return false;
+            if (response.isSuccess()) {
+                User user = gson.fromJson(response.getMessage(), User.class);
+                currentUsername = user.getUsername();
+                userController.setCurrentUser(user);
+                saveSession(user.getEmail());
+                return true;
+            }
+        } catch (Exception e) {
+            System.out.println("Authentication error: " + e.getMessage());
         }
+        System.out.println("Invalid login credentials.");
+        return false;
     }
 
     public boolean registerUser(String username, String password, String email,
                                 int age, double height, double weight,
-                                String workoutPreference) {
-        User existingUser = userController.getUserProfile(email);
-        if (existingUser != null) {
-            System.out.println("An account with this email already exists.");
-            return false;
+                                String workoutPreference, String injuryInfo) {
+        try {
+            // Create registration request
+            RegisterRequest registerRequest = new RegisterRequest(
+                    username, hashPassword(password), email,
+                    age, height, weight, workoutPreference, injuryInfo
+            );
+
+            ServerResponse response = client.sendRequest("REGISTER_USER", registerRequest);
+
+            if (response.isSuccess()) {
+                User user = gson.fromJson(response.getMessage(), User.class);
+                currentUsername = username;
+                userController.setCurrentUser(user);
+                saveSession(email);
+                System.out.println("User registered successfully.");
+                return true;
+            } else {
+                System.out.println(response.getMessage());
+            }
+        } catch (Exception e) {
+            System.out.println("Registration error: " + e.getMessage());
         }
-
-        String hashedPassword = hashPassword(password);
-
-        boolean success = userController.saveUser(username, hashedPassword, email, age,
-                height, weight, workoutPreference);
-
-        if (success) {
-            System.out.println("User registered successfully.");
-            currentUsername = username;
-            return true;
-        }
-
-        System.out.println("Registration failed.");
         return false;
     }
 
@@ -64,8 +82,9 @@ public class LoginManager {
         try {
             String savedEmail = readSessionFile();
             if (savedEmail != null && !savedEmail.trim().isEmpty()) {
-                User user = userController.getUserProfile(savedEmail);
-                if (user != null) {
+                ServerResponse response = client.sendRequest("AUTO_LOGIN", savedEmail);
+                if (response.isSuccess()) {
+                    User user = gson.fromJson(response.getMessage(), User.class);
                     currentUsername = user.getUsername();
                     userController.setCurrentUser(user);
                     System.out.println("Auto-login successful for user: " + user.getUsername());
@@ -83,6 +102,7 @@ public class LoginManager {
             Files.deleteIfExists(Paths.get(SESSION_FILE));
             currentUsername = null;
             userController.setCurrentUser(null);
+            client.sendRequest("LOGOUT", "");
             System.out.println("Logged out successfully.");
         } catch (IOException e) {
             System.out.println("Error clearing session: " + e.getMessage());
@@ -110,16 +130,9 @@ public class LoginManager {
             return Base64.getEncoder().encodeToString(hash);
         } catch (NoSuchAlgorithmException e) {
             System.out.println("Error hashing password: " + e.getMessage());
-            return password; // Fallback to plain password if hashing fails
+            return password;
         }
     }
 
-    private boolean verifyPassword(String inputPassword, String storedPassword) {
-        String hashedInput = hashPassword(inputPassword);
-        return hashedInput.equals(storedPassword);
-    }
-
-    public String getCurrentUsername() {
-        return currentUsername;
-    }
 }
+

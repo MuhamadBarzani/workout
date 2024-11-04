@@ -10,13 +10,13 @@ public class User {
     private double height;
     private double weight;
     private String workoutPreference;
-
+    private String injuryInfo;
     // Default constructor
     public User() {}
 
     // Full constructor
     public User(int userID, String username, String password, String email,
-                int age, double height, double weight, String workoutPreference) {
+                int age, double height, double weight, String workoutPreference, String injuryInfo) {
         this.userID = userID;
         this.username = username;
         this.password = password;
@@ -25,15 +25,18 @@ public class User {
         this.height = height;
         this.weight = weight;
         this.workoutPreference = workoutPreference;
+        this.injuryInfo = injuryInfo;
+    }
+    public String getInjuryInfo() {
+        return injuryInfo;
     }
 
+    public void setInjuryInfo(String injuryInfo) {
+        this.injuryInfo = injuryInfo;
+    }
     // Getters and Setters
     public int getUserID() {
         return userID;
-    }
-
-    public void setUserID(int userID) {
-        this.userID = userID;
     }
 
     public String getUsername() {

@@ -1,9 +1,13 @@
 package workout.models;
 
+import java.io.Serial;
+import java.io.Serializable;
 import java.util.Date;
 import java.util.List;
 
-public class WorkoutPlan {
+public class WorkoutPlan implements Serializable {
+    @Serial
+    private static final long serialVersionUID = 1L;
     private int planId;
     private int userId;
     private Date startDate;
@@ -15,16 +19,8 @@ public class WorkoutPlan {
 
     // Getters and setters
 
-    public int getPlanId() {
-        return planId;
-    }
-
     public void setPlanId(int planId) {
         this.planId = planId;
-    }
-
-    public int getUserId() {
-        return userId;
     }
 
     public void setUserId(int userId) {

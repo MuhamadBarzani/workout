@@ -1,6 +1,6 @@
 package order;
 
-import auth.DatabaseManager;
+import server.DatabaseManager;
 
 import java.sql.*;
 import java.time.LocalDateTime;
@@ -72,46 +72,62 @@ public class OrderModel {
 
     public int createOrder(int userID, List<OrderSupplement> items, String deliveryLocation) {
         Connection conn = null;
+        int orderID = -1;
+
         try {
             conn = DatabaseManager.getInstance().getConnection();
-            conn.setAutoCommit(false);
+            conn.setAutoCommit(false); // Start transaction
 
-            // Calculate total price
-            double totalPrice = calculateTotalPrice(conn, items);
+            try {
+                // 1. Calculate total price
+                double totalPrice = calculateTotalPrice(conn, items);
 
-            // Create order and get generated order ID
-            int orderID = insertOrder(conn, userID, totalPrice, deliveryLocation);
-            if (orderID == -1) {
-                conn.rollback();
+                // 2. Create order and get generated order ID
+                orderID = insertOrder(conn, userID, totalPrice, deliveryLocation);
+                if (orderID == -1) {
+                    throw new SQLException("Failed to create order entry");
+                }
+
+                // 3. Insert order items
+                insertOrderItems(conn, orderID, items);
+
+                // 4. Update supplement quantities
+                updateSupplementQuantities(conn, items);
+
+                // If we made it here, commit the transaction
+                conn.commit();
+                return orderID;
+
+            } catch (SQLException e) {
+                if (conn != null) {
+                    try {
+                        conn.rollback();
+                    } catch (SQLException ex) {
+                        System.out.println("Error during rollback: " + ex.getMessage());
+                    }
+                }
+                System.out.println("Error in order creation process: " + e.getMessage());
+                e.printStackTrace();
                 return -1;
             }
 
-            // Insert order items and update supplement quantities
-            insertOrderItems(conn, orderID, items);
-            updateSupplementQuantities(conn, items);
-
-            conn.commit();
-            return orderID;
         } catch (SQLException e) {
-            try {
-                if (conn != null) conn.rollback();
-            } catch (SQLException ex) {
-                System.out.println("Error rolling back transaction: " + ex.getMessage());
-            }
-            System.out.println("Error creating order: " + e.getMessage());
+            System.out.println("Database connection error: " + e.getMessage());
+            e.printStackTrace();
             return -1;
+
         } finally {
-            try {
-                if (conn != null) {
+            if (conn != null) {
+                try {
                     conn.setAutoCommit(true);
                     conn.close();
+                } catch (SQLException e) {
+                    System.out.println("Error closing connection: " + e.getMessage());
                 }
-            } catch (SQLException e) {
-                System.out.println("Error resetting connection: " + e.getMessage());
             }
         }
     }
-
+    // Helper method to insert the order
     private int insertOrder(Connection conn, int userID, double totalPrice, String deliveryLocation) throws SQLException {
         String orderSql = "INSERT INTO orders (userID, totalPrice, status, deliveryLocation, dateCreated) VALUES (?, ?, ?, ?, ?)";
         try (PreparedStatement stmt = conn.prepareStatement(orderSql, Statement.RETURN_GENERATED_KEYS)) {
@@ -130,6 +146,7 @@ public class OrderModel {
         return -1;
     }
 
+    // Helper method to insert order items
     private void insertOrderItems(Connection conn, int orderID, List<OrderSupplement> items) throws SQLException {
         String itemSql = "INSERT INTO ordersupplements (orderID, supplementID, quantityOrdered) VALUES (?, ?, ?)";
         try (PreparedStatement stmt = conn.prepareStatement(itemSql)) {
@@ -143,18 +160,40 @@ public class OrderModel {
         }
     }
 
+    // Helper method to update supplement quantities
     private void updateSupplementQuantities(Connection conn, List<OrderSupplement> items) throws SQLException {
-        String updateSql = "UPDATE supplements SET quantityAvailable = quantityAvailable - ? WHERE supplementID = ?";
+        String updateSql = "UPDATE supplements SET quantityAvailable = quantityAvailable - ? WHERE supplementID = ? AND quantityAvailable >= ?";
         try (PreparedStatement stmt = conn.prepareStatement(updateSql)) {
             for (OrderSupplement item : items) {
                 stmt.setInt(1, item.getQuantityOrdered());
                 stmt.setInt(2, item.getSupplementID());
-                stmt.addBatch();
+                stmt.setInt(3, item.getQuantityOrdered()); // Ensures quantity is available
+                int updated = stmt.executeUpdate();
+                if (updated == 0) {
+                    throw new SQLException("Insufficient quantity for supplement ID: " + item.getSupplementID());
+                }
             }
-            stmt.executeBatch();
         }
     }
 
+    // Helper method to calculate total price
+    private double calculateTotalPrice(Connection conn, List<OrderSupplement> items) throws SQLException {
+        double total = 0;
+        String sql = "SELECT price FROM supplements WHERE supplementID = ?";
+        try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+            for (OrderSupplement item : items) {
+                stmt.setInt(1, item.getSupplementID());
+                try (ResultSet rs = stmt.executeQuery()) {
+                    if (rs.next()) {
+                        total += rs.getDouble("price") * item.getQuantityOrdered();
+                    } else {
+                        throw new SQLException("Supplement not found with ID: " + item.getSupplementID());
+                    }
+                }
+            }
+        }
+        return total;
+    }
 
     public boolean cancelOrder(int orderID) {
         Connection conn = null;
@@ -224,19 +263,4 @@ public class OrderModel {
         );
     }
 
-    private double calculateTotalPrice(Connection conn, List<OrderSupplement> items) throws SQLException {
-        double total = 0;
-        String sql = "SELECT price FROM supplements WHERE supplementID = ?";
-        try (PreparedStatement stmt = conn.prepareStatement(sql)) {
-            for (OrderSupplement item : items) {
-                stmt.setInt(1, item.getSupplementID());
-                try (ResultSet rs = stmt.executeQuery()) {
-                    if (rs.next()) {
-                        total += rs.getDouble("price") * item.getQuantityOrdered();
-                    }
-                }
-            }
-        }
-        return total;
-    }
 }

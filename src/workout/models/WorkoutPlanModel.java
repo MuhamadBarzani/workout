@@ -1,7 +1,7 @@
 package workout.models;
 
 import user.User;
-import auth.DatabaseManager;
+import server.DatabaseManager;
 import exercise.ExerciseModel;
 import exercise.Exercise;
 import java.sql.*;
@@ -9,56 +9,48 @@ import java.util.*;
 import java.util.Date;
 
 public class WorkoutPlanModel {
+    private final ExerciseModel exerciseModel;
+    private static final List<String> BODY_PARTS = Arrays.asList(
+            "Chest", "Back", "Legs", "Shoulders", "Arms", "Core"
+    );
+
+    public WorkoutPlanModel() {
+        this.exerciseModel = new ExerciseModel();
+    }
+
     public WorkoutPlan generateWorkoutPlan(User user, String targetGoal, int daysPerWeek, String injuryInfo) {
         Connection conn = null;
         WorkoutPlan plan = null;
         try {
-            // Get a new connection
             conn = DatabaseManager.getInstance().getConnection();
-
-            // Ensure we're starting with autoCommit false
             conn.setAutoCommit(false);
 
-            // Create new workout plan
             plan = new WorkoutPlan();
             plan.setUserId(user.getUserID());
             plan.setStartDate(new Date());
             plan.setActive(true);
             plan.setTargetGoal(targetGoal);
 
-            // Get available body parts excluding injured areas
-            List<String> availableBodyParts = getAvailableBodyParts(injuryInfo);
+            // Deactivate current plans
+            deactivateCurrentPlans(conn, user.getUserID());
 
-            // Generate workout days - pass connection to maintain transaction
-            List<WorkoutDay> workoutDays = new ArrayList<>();
-            for (int i = 0; i < daysPerWeek; i++) {
-                WorkoutDay day = generateWorkoutDay(
-                        conn,
-                        i + 1,
-                        availableBodyParts.get(i % availableBodyParts.size()),
-                        user.getWorkoutPreference(),
-                        targetGoal
-                );
-                workoutDays.add(day);
-            }
+            // Create template
+            int templateId = createWorkoutTemplate(conn, targetGoal);
 
+            // Create user plan association
+            createUserPlanAssociation(conn, user.getUserID(), templateId, plan.getStartDate());
+
+            // Generate and save workout days
+            List<WorkoutDay> workoutDays = generateWorkoutDays(conn, templateId, daysPerWeek, injuryInfo);
             plan.setWorkoutDays(workoutDays);
 
-            // Save the plan to database using the same connection
-            savePlan(conn, plan);
-
-            // If we got here without exception, commit the transaction
             conn.commit();
-
             return plan;
 
         } catch (SQLException e) {
             try {
-                if (conn != null) {
-                    conn.rollback();
-                }
+                if (conn != null) conn.rollback();
             } catch (SQLException ex) {
-                // Log rollback failure
                 ex.printStackTrace();
             }
             e.printStackTrace();
@@ -75,53 +67,9 @@ public class WorkoutPlanModel {
         }
     }
 
-    // Update generateWorkoutDay to accept Connection parameter
-    private WorkoutDay generateWorkoutDay(
-            Connection conn,
-            int dayNumber,
-            String bodyPart,
-            String experienceLevel,
-            String targetGoal
-    ) throws SQLException {
-        WorkoutDay day = new WorkoutDay();
-        day.setDayNumber(dayNumber);
-        day.setBodyPart(bodyPart);
-
-        // Use ExerciseModel to get exercises - pass the connection
-        boolean hasEquipment = true;
-        List<Exercise> exercises = exerciseModel.generateWorkout(conn, bodyPart, hasEquipment, 4);
-
-        List<WorkoutExercise> workoutExercises = new ArrayList<>();
-        for (Exercise exercise : exercises) {
-            WorkoutExercise workoutExercise = new WorkoutExercise();
-            workoutExercise.setExerciseId(exercise.getExerciseID());
-            workoutExercise.setExerciseName(exercise.getExerciseName());
-            workoutExercise.setBodyTargeted(exercise.getBodyTargeted());
-            configureExerciseParameters(workoutExercise, targetGoal);
-            workoutExercise.setNotes(exercise.getDescription());
-            workoutExercises.add(workoutExercise);
-        }
-
-        day.setExercises(workoutExercises);
-        return day;
-    }
-    private static final List<String> BODY_PARTS = Arrays.asList(
-            "Chest", "Back", "Legs", "Shoulders", "Arms", "Core"
-    );
-
-    private final ExerciseModel exerciseModel;
-
-    public WorkoutPlanModel() {
-        this.exerciseModel = new ExerciseModel();
-    }
-
-    // [Rest of the methods remain the same, but we'll update the database access methods]
-
     public List<WorkoutPlan> getUserWorkoutHistory(int userId) throws SQLException {
         List<WorkoutPlan> history = new ArrayList<>();
-        Connection conn = null;
-        try {
-            conn = DatabaseManager.getInstance().getConnection();
+        try (Connection conn = DatabaseManager.getInstance().getConnection()) {
             String query = """
                 SELECT uwp.*, wt.name, wt.targetGoal
                 FROM user_workout_plans uwp
@@ -135,33 +83,17 @@ public class WorkoutPlanModel {
                 ResultSet rs = stmt.executeQuery();
 
                 while (rs.next()) {
-                    WorkoutPlan plan = new WorkoutPlan();
-                    plan.setPlanId(rs.getInt("userPlanID"));
-                    plan.setUserId(userId);
-                    plan.setStartDate(rs.getDate("startDate"));
-                    plan.setEndDate(rs.getDate("endDate"));
-                    plan.setActive(rs.getBoolean("isActive"));
-                    plan.setTemplateName(rs.getString("name"));
-                    plan.setTargetGoal(rs.getString("targetGoal"));
-
-                    // Load workout days for this plan
+                    WorkoutPlan plan = createPlanFromResultSet(rs);
                     plan.setWorkoutDays(getWorkoutDaysForPlan(conn, rs.getInt("templateID")));
-
                     history.add(plan);
                 }
             }
             return history;
-        } finally {
-            if (conn != null && !conn.isClosed()) {
-                conn.close();
-            }
         }
     }
 
     public WorkoutPlan getCurrentWorkoutPlan(int userId) throws SQLException {
-        Connection conn = null;
-        try {
-            conn = DatabaseManager.getInstance().getConnection();
+        try (Connection conn = DatabaseManager.getInstance().getConnection()) {
             String query = """
                 SELECT uwp.*, wt.name, wt.targetGoal
                 FROM user_workout_plans uwp
@@ -174,26 +106,12 @@ public class WorkoutPlanModel {
                 ResultSet rs = stmt.executeQuery();
 
                 if (rs.next()) {
-                    WorkoutPlan plan = new WorkoutPlan();
-                    plan.setPlanId(rs.getInt("userPlanID"));
-                    plan.setUserId(userId);
-                    plan.setStartDate(rs.getDate("startDate"));
-                    plan.setEndDate(rs.getDate("endDate"));
-                    plan.setActive(true);
-                    plan.setTemplateName(rs.getString("name"));
-                    plan.setTargetGoal(rs.getString("targetGoal"));
-
-                    // Load workout days for current plan
+                    WorkoutPlan plan = createPlanFromResultSet(rs);
                     plan.setWorkoutDays(getWorkoutDaysForPlan(conn, rs.getInt("templateID")));
-
                     return plan;
                 }
             }
             return null;
-        } finally {
-            if (conn != null && !conn.isClosed()) {
-                conn.close();
-            }
         }
     }
 
@@ -217,157 +135,102 @@ public class WorkoutPlanModel {
 
             while (rs.next()) {
                 int dayId = rs.getInt("dayID");
-
                 if (currentDayId != dayId) {
-                    currentDay = new WorkoutDay();
-                    currentDay.setDayId(dayId);
-                    currentDay.setDayNumber(rs.getInt("dayNumber"));
-                    currentDay.setBodyPart(rs.getString("bodyPart"));
-                    currentDay.setExercises(new ArrayList<>());
+                    currentDay = createWorkoutDayFromResultSet(rs);
                     days.add(currentDay);
                     currentDayId = dayId;
                 }
-
-                WorkoutExercise exercise = new WorkoutExercise();
-                exercise.setExerciseId(rs.getInt("exerciseID"));
-                exercise.setExerciseName(rs.getString("exerciseName"));
-                exercise.setBodyTargeted(rs.getString("bodyTargeted"));
-                exercise.setSets(rs.getInt("sets"));
-                exercise.setRepRangeMin(rs.getInt("repRangeMin"));
-                exercise.setRepRangeMax(rs.getInt("repRangeMax"));
-                exercise.setRestSeconds(rs.getInt("restSeconds"));
-                exercise.setNotes(rs.getString("notes"));
-                currentDay.getExercises().add(exercise);
+                currentDay.getExercises().add(createWorkoutExerciseFromResultSet(rs));
             }
         }
-
         return days;
     }
+    private List<WorkoutDay> generateWorkoutDays(Connection conn, int templateId, int daysPerWeek, String injuryInfo)
+            throws SQLException {
+        List<WorkoutDay> workoutDays = new ArrayList<>();
+        List<String> availableBodyParts = getAvailableBodyParts(injuryInfo);
 
+        for (int i = 0; i < daysPerWeek; i++) {
+            String bodyPart = availableBodyParts.get(i % availableBodyParts.size());
 
-    private List<String> getAvailableBodyParts(String injuryInfo) {
-            List<String> available = new ArrayList<>(BODY_PARTS);
-            if (injuryInfo != null && !injuryInfo.isEmpty()) {
-                String[] injuries = injuryInfo.toLowerCase().split(",");
-                available.removeIf(bodyPart ->
-                        Arrays.stream(injuries)
-                                .anyMatch(injury -> bodyPart.toLowerCase().contains(injury.trim())));
+            // Create workout day
+            String insertDayQuery = "INSERT INTO workout_days (templateID, dayNumber, bodyPart) VALUES (?, ?, ?)";
+            int dayId;
+            try (PreparedStatement stmt = conn.prepareStatement(insertDayQuery, Statement.RETURN_GENERATED_KEYS)) {
+                stmt.setInt(1, templateId);
+                stmt.setInt(2, i + 1);
+                stmt.setString(3, bodyPart);
+                stmt.executeUpdate();
+                ResultSet rs = stmt.getGeneratedKeys();
+                rs.next();
+                dayId = rs.getInt(1);
             }
-            return available;
-        }
 
-        private void configureExerciseParameters(WorkoutExercise exercise, String targetGoal) {
-            switch (targetGoal.toLowerCase()) {
-                case "strength":
-                    exercise.setSets(5);
-                    exercise.setRepRangeMin(3);
-                    exercise.setRepRangeMax(5);
-                    exercise.setRestSeconds(180);
-                    break;
-                case "muscle gain":
-                    exercise.setSets(4);
-                    exercise.setRepRangeMin(8);
-                    exercise.setRepRangeMax(12);
-                    exercise.setRestSeconds(90);
-                    break;
-                case "weight loss":
-                    exercise.setSets(3);
-                    exercise.setRepRangeMin(15);
-                    exercise.setRepRangeMax(20);
-                    exercise.setRestSeconds(45);
-                    break;
-                case "endurance":
-                    exercise.setSets(3);
-                    exercise.setRepRangeMin(12);
-                    exercise.setRepRangeMax(15);
-                    exercise.setRestSeconds(60);
-                    break;
-                default: // General fitness
-                    exercise.setSets(3);
-                    exercise.setRepRangeMin(10);
-                    exercise.setRepRangeMax(12);
-                    exercise.setRestSeconds(90);
+            // Create day object
+            WorkoutDay day = new WorkoutDay();
+            day.setDayId(dayId);
+            day.setDayNumber(i + 1);
+            day.setBodyPart(bodyPart);
+            day.setExercises(new ArrayList<>());
+
+            // Generate exercises for this day
+            List<Exercise> exercises = exerciseModel.generateWorkout(conn, bodyPart, true, 4);
+            for (Exercise exercise : exercises) {
+                WorkoutExercise workoutExercise = createWorkoutExercise(exercise, getExerciseParameters(day.getBodyPart()));
+                saveWorkoutExercise(conn, dayId, workoutExercise);
+                day.getExercises().add(workoutExercise);
             }
+
+            workoutDays.add(day);
         }
-
-
-        private void savePlan(Connection conn, WorkoutPlan plan) throws SQLException {
-        // First deactivate any current plans
-        String deactivateQuery = "UPDATE user_workout_plans SET isActive = 0 WHERE userID = ? AND isActive = 1";
-        try (PreparedStatement stmt = conn.prepareStatement(deactivateQuery)) {
-            stmt.setInt(1, plan.getUserId());
-            stmt.executeUpdate();
-        }
-
-        // Insert new plan
-        String insertPlanQuery = """
-            INSERT INTO workout_templates (name, targetGoal, experienceLevel)
-            VALUES (?, ?, ?)
-        """;
-
-        int templateId;
-        try (PreparedStatement stmt = conn.prepareStatement(insertPlanQuery, Statement.RETURN_GENERATED_KEYS)) {
-            stmt.setString(1, "Custom Plan - " + plan.getTargetGoal());
-            stmt.setString(2, plan.getTargetGoal());
-            stmt.setString(3, "Intermediate");
-
-            stmt.executeUpdate();
-            ResultSet rs = stmt.getGeneratedKeys();
-            rs.next();
-            templateId = rs.getInt(1);
-        }
-
-        // Insert user plan association
-        String insertUserPlanQuery = """
-            INSERT INTO user_workout_plans (userID, templateID, startDate, isActive)
-            VALUES (?, ?, ?, 1)
-        """;
-
-        try (PreparedStatement stmt = conn.prepareStatement(insertUserPlanQuery)) {
-            stmt.setInt(1, plan.getUserId());
-            stmt.setInt(2, templateId);
-            stmt.setDate(3, new java.sql.Date(plan.getStartDate().getTime()));
-            stmt.executeUpdate();
-        }
-
-        // Save workout days and exercises
-        for (WorkoutDay day : plan.getWorkoutDays()) {
-            saveWorkoutDay(conn, templateId, day);
-        }
+        return workoutDays;
     }
 
-    private void saveWorkoutDay(Connection conn, int templateId, WorkoutDay day) throws SQLException {
-        String insertDayQuery = """
-            INSERT INTO workout_days (templateID, dayNumber, bodyPart)
-            VALUES (?, ?, ?)
-        """;
-
-        int dayId;
-        try (PreparedStatement stmt = conn.prepareStatement(insertDayQuery, Statement.RETURN_GENERATED_KEYS)) {
-            stmt.setInt(1, templateId);
-            stmt.setInt(2, day.getDayNumber());
-            stmt.setString(3, day.getBodyPart());
-
-            stmt.executeUpdate();
-            ResultSet rs = stmt.getGeneratedKeys();
-            rs.next();
-            dayId = rs.getInt(1);
+    private List<String> getAvailableBodyParts(String injuryInfo) {
+        List<String> available = new ArrayList<>(BODY_PARTS);
+        if (injuryInfo != null && !injuryInfo.isEmpty()) {
+            String[] injuries = injuryInfo.toLowerCase().split(",");
+            available.removeIf(bodyPart ->
+                    Arrays.stream(injuries)
+                            .anyMatch(injury -> bodyPart.toLowerCase().contains(injury.trim())));
         }
+        return available;
+    }
 
-        // Save exercises for this day
-        for (WorkoutExercise exercise : day.getExercises()) {
-            saveWorkoutExercise(conn, dayId, exercise);
-        }
+    private WorkoutExercise createWorkoutExercise(Exercise exercise, ExerciseParameters params) {
+        WorkoutExercise workoutExercise = new WorkoutExercise();
+        workoutExercise.setExerciseId(exercise.getExerciseID());
+        workoutExercise.setExerciseName(exercise.getExerciseName());
+        workoutExercise.setBodyTargeted(exercise.getBodyTargeted());
+        workoutExercise.setSets(params.sets);
+        workoutExercise.setRepRangeMin(params.repMin);
+        workoutExercise.setRepRangeMax(params.repMax);
+        workoutExercise.setRestSeconds(params.rest);
+        workoutExercise.setNotes(exercise.getDescription());
+        return workoutExercise;
+    }
+
+    private ExerciseParameters getExerciseParameters(String bodyPart) {
+        // Default parameters based on body part
+        return switch (bodyPart.toLowerCase()) {
+            case "legs" -> new ExerciseParameters(4, 8, 12, 120); // Heavier compound movements
+            case "back" -> new ExerciseParameters(4, 8, 12, 90);
+            case "chest" -> new ExerciseParameters(4, 8, 12, 90);
+            case "shoulders" -> new ExerciseParameters(3, 10, 15, 60);
+            case "arms" -> new ExerciseParameters(3, 12, 15, 45);
+            case "core" -> new ExerciseParameters(3, 15, 20, 30);
+            default -> new ExerciseParameters(3, 10, 12, 60); // Default parameters
+        };
     }
 
     private void saveWorkoutExercise(Connection conn, int dayId, WorkoutExercise exercise) throws SQLException {
-        String insertExerciseQuery = """
-            INSERT INTO workout_exercises 
+        String sql = """
+            INSERT INTO workout_exercises
             (dayID, exerciseID, sets, repRangeMin, repRangeMax, restSeconds, notes)
             VALUES (?, ?, ?, ?, ?, ?, ?)
         """;
 
-        try (PreparedStatement stmt = conn.prepareStatement(insertExerciseQuery)) {
+        try (PreparedStatement stmt = conn.prepareStatement(sql)) {
             stmt.setInt(1, dayId);
             stmt.setInt(2, exercise.getExerciseId());
             stmt.setInt(3, exercise.getSets());
@@ -375,8 +238,98 @@ public class WorkoutPlanModel {
             stmt.setInt(5, exercise.getRepRangeMax());
             stmt.setInt(6, exercise.getRestSeconds());
             stmt.setString(7, exercise.getNotes());
-
             stmt.executeUpdate();
         }
+    }
+
+    // Helper class for exercise parameters
+    private static class ExerciseParameters {
+        final int sets;
+        final int repMin;
+        final int repMax;
+        final int rest;
+
+        ExerciseParameters(int sets, int repMin, int repMax, int rest) {
+            this.sets = sets;
+            this.repMin = repMin;
+            this.repMax = repMax;
+            this.rest = rest;
+        }
+    }
+    // Helper methods for database operations
+    private void deactivateCurrentPlans(Connection conn, int userId) throws SQLException {
+        String sql = "UPDATE user_workout_plans SET isActive = 0 WHERE userID = ? AND isActive = 1";
+        try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setInt(1, userId);
+            stmt.executeUpdate();
+        }
+    }
+
+    private int createWorkoutTemplate(Connection conn, String targetGoal) throws SQLException {
+        String sql = "INSERT INTO workout_templates (name, targetGoal, experienceLevel) VALUES (?, ?, ?)";
+        try (PreparedStatement stmt = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
+            stmt.setString(1, "Custom Plan - " + targetGoal);
+            stmt.setString(2, targetGoal);
+            stmt.setString(3, "Intermediate");
+            stmt.executeUpdate();
+            ResultSet rs = stmt.getGeneratedKeys();
+            rs.next();
+            return rs.getInt(1);
+        }
+    }
+
+    private void createUserPlanAssociation(Connection conn, int userId, int templateId, Date startDate) throws SQLException {
+        String sql = "INSERT INTO user_workout_plans (userID, templateID, startDate, isActive) VALUES (?, ?, ?, 1)";
+        try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setInt(1, userId);
+            stmt.setInt(2, templateId);
+            stmt.setDate(3, new java.sql.Date(startDate.getTime()));
+            stmt.executeUpdate();
+        }
+    }
+
+    // Helper methods for creating objects from ResultSet
+    private WorkoutPlan createPlanFromResultSet(ResultSet rs) throws SQLException {
+        WorkoutPlan plan = new WorkoutPlan();
+        plan.setPlanId(rs.getInt("userPlanID"));
+        plan.setUserId(rs.getInt("userID"));
+
+        // Convert SQL Date to java.util.Date
+        java.sql.Date sqlStartDate = rs.getDate("startDate");
+        if (sqlStartDate != null) {
+            plan.setStartDate(new java.util.Date(sqlStartDate.getTime()));
+        }
+
+        java.sql.Date sqlEndDate = rs.getDate("endDate");
+        if (sqlEndDate != null) {
+            plan.setEndDate(new java.util.Date(sqlEndDate.getTime()));
+        }
+
+        plan.setActive(rs.getBoolean("isActive"));
+        plan.setTemplateName(rs.getString("name"));
+        plan.setTargetGoal(rs.getString("targetGoal"));
+        return plan;
+    }
+
+    private WorkoutDay createWorkoutDayFromResultSet(ResultSet rs) throws SQLException {
+        WorkoutDay day = new WorkoutDay();
+        day.setDayId(rs.getInt("dayID"));
+        day.setDayNumber(rs.getInt("dayNumber"));
+        day.setBodyPart(rs.getString("bodyPart"));
+        day.setExercises(new ArrayList<>());
+        return day;
+    }
+
+    private WorkoutExercise createWorkoutExerciseFromResultSet(ResultSet rs) throws SQLException {
+        WorkoutExercise exercise = new WorkoutExercise();
+        exercise.setExerciseId(rs.getInt("exerciseID"));
+        exercise.setExerciseName(rs.getString("exerciseName"));
+        exercise.setBodyTargeted(rs.getString("bodyTargeted"));
+        exercise.setSets(rs.getInt("sets"));
+        exercise.setRepRangeMin(rs.getInt("repRangeMin"));
+        exercise.setRepRangeMax(rs.getInt("repRangeMax"));
+        exercise.setRestSeconds(rs.getInt("restSeconds"));
+        exercise.setNotes(rs.getString("notes"));
+        return exercise;
     }
 }

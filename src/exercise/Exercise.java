@@ -3,14 +3,12 @@
 package exercise;
 
 public class Exercise {
-    private int exerciseID;
-    private String exerciseName;
-    private String type;
-    private String bodyTargeted;
-    private boolean equipmentNeeded;
-    private String description;
-    private String difficulty;
-    private int recommendedRest;
+    private final int exerciseID;
+    private final String exerciseName;
+    private final String type;
+    private final String bodyTargeted;
+    private final boolean equipmentNeeded;
+    private final String description;
 
     public Exercise(int exerciseID, String exerciseName, String type, String bodyTargeted, boolean equipmentNeeded, String description) {
         this.exerciseID = exerciseID;
@@ -19,17 +17,6 @@ public class Exercise {
         this.bodyTargeted = bodyTargeted;
         this.equipmentNeeded = equipmentNeeded;
         this.description = description;
-    }
-
-    public Exercise(int exerciseID, String exerciseName, String type, String bodyTargeted, boolean equipmentNeeded, String description, String difficulty, int recommendedRest) {
-        this.exerciseID = exerciseID;
-        this.exerciseName = exerciseName;
-        this.type = type;
-        this.bodyTargeted = bodyTargeted;
-        this.equipmentNeeded = equipmentNeeded;
-        this.description = description;
-        this.difficulty = difficulty;
-        this.recommendedRest = recommendedRest;
     }
 
     // Getters

@@ -1,55 +1,32 @@
 package exercise;
 
-import auth.DatabaseManager;
+import server.DatabaseManager;
 import java.sql.*;
 import java.util.*;
 
 public class ExerciseModel {
-    public List<Exercise> getAllExercises(Connection existingConnection) {
+    public List<Exercise> getAllExercises() {
         List<Exercise> exercises = new ArrayList<>();
-        String query = "SELECT * FROM exercises";
 
-        boolean useExistingConnection = (existingConnection != null);
-        Connection connection = null;
+        try (Connection conn = DatabaseManager.getInstance().getConnection();
+             PreparedStatement stmt = conn.prepareStatement("SELECT * FROM exercises");
+             ResultSet rs = stmt.executeQuery()) {
 
-        try {
-            // Use existing connection if provided, otherwise create new one
-            connection = useExistingConnection ? existingConnection :
-                    DatabaseManager.getInstance().getConnection();
-
-            try (PreparedStatement stmt = connection.prepareStatement(query);
-                 ResultSet rs = stmt.executeQuery()) {
-
-                while (rs.next()) {
-                    Exercise exercise = new Exercise(
-                            rs.getInt("exerciseID"),
-                            rs.getString("exerciseName"),
-                            rs.getString("type"),
-                            rs.getString("bodyTargeted"),
-                            rs.getBoolean("equipmentNeeded"),
-                            rs.getString("description")
-                    );
-                    exercises.add(exercise);
-                }
+            while (rs.next()) {
+                exercises.add(new Exercise(
+                        rs.getInt("exerciseID"),
+                        rs.getString("exerciseName"),
+                        rs.getString("type"),
+                        rs.getString("bodyTargeted"),
+                        rs.getBoolean("equipmentNeeded"),
+                        rs.getString("description")
+                ));
             }
         } catch (SQLException e) {
-            e.printStackTrace();
-        } finally {
-            // Only close the connection if we created it
-            if (!useExistingConnection && connection != null) {
-                try {
-                    connection.close();
-                } catch (SQLException e) {
-                    e.printStackTrace();
-                }
-            }
+            System.err.println("Database error retrieving exercises: " + e.getMessage());
         }
-        return exercises;
-    }
 
-    // Overloaded method for backward compatibility
-    public List<Exercise> getAllExercises() {
-        return getAllExercises(null);
+        return exercises;
     }
 
     public List<Exercise> generateWorkout(Connection existingConnection, String bodyTarget,
@@ -100,8 +77,4 @@ public class ExerciseModel {
         return workout;
     }
 
-    // Overloaded method for backward compatibility
-    public List<Exercise> generateWorkout(String bodyTarget, boolean hasEquipment, int exerciseCount) {
-        return generateWorkout(null, bodyTarget, hasEquipment, exerciseCount);
-    }
 }
