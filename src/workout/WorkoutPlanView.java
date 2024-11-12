@@ -173,3 +173,10 @@ public class WorkoutPlanView {
         System.out.println("ℹ " + message);
     }
 }
+
+
+
+
+
+
+

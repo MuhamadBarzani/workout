@@ -24,7 +24,6 @@ import utils.LocalDateTimeAdapter;
 import workout.WorkoutPlanRequest;
 import workout.models.WorkoutPlan;
 import workout.models.WorkoutPlanModel;
-import java.sql.SQLException;
 import java.time.LocalDateTime;
 import java.util.List;
 public class Server {
@@ -240,7 +239,7 @@ public class Server {
                     try {
                         List<WorkoutPlan> history = workoutPlanModel.getUserWorkoutHistory(historyUserId);
                         return gson.toJson(new ServerResponse(true, gson.toJson(history)));
-                    } catch (SQLException e) {
+                    } catch (Exception e) {
                         return gson.toJson(new ServerResponse(false, "Error retrieving workout history: " + e.getMessage()));
                     }
 
@@ -249,7 +248,7 @@ public class Server {
                     try {
                         WorkoutPlan currentPlan = workoutPlanModel.getCurrentWorkoutPlan(currentUserId);
                         return gson.toJson(new ServerResponse(true, gson.toJson(currentPlan)));
-                    } catch (SQLException e) {
+                    } catch (Exception e) {
                         return gson.toJson(new ServerResponse(false, "Error retrieving current workout: " + e.getMessage()));
                     }
                     // Add to Server.java's handleRequest method

@@ -1,112 +1,91 @@
 package user;
+import server.FileManager;
 
-import server.DatabaseManager;
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
+import java.util.*;
 
 public class UserModel {
-    public boolean createUser(User user) {
-        try (Connection connection = DatabaseManager.getInstance().getConnection()) {
-            String sql = "INSERT INTO users (username, password, email, age, height, weight, workoutPreference, injuryInfo) " +
-                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
-            PreparedStatement statement = connection.prepareStatement(sql);
-            statement.setString(1, user.getUsername());
-            statement.setString(2, user.getPassword());
-            statement.setString(3, user.getEmail());
-            statement.setInt(4, user.getAge());
-            statement.setDouble(5, user.getHeight());
-            statement.setDouble(6, user.getWeight());
-            statement.setString(7, user.getWorkoutPreference());
-            statement.setString(8, user.getInjuryInfo());
+    private static final String USERS_FILE = "users.json";
+    private static final String USER_COUNTER = "user_counter.txt";
+    private final FileManager fileManager;
 
-            return statement.executeUpdate() > 0;
-        } catch (SQLException e) {
+    public UserModel() {
+        this.fileManager = FileManager.getInstance();
+    }
+
+    public boolean createUser(User user) {
+        try {
+            List<User> users = getAllUsers();
+
+            // Check if email already exists
+            if (users.stream().anyMatch(u -> u.getEmail().equals(user.getEmail()))) {
+                return false;
+            }
+
+            // Generate new user ID
+            int userId = fileManager.getNextId(USER_COUNTER);
+
+            // Create new user with generated ID (using constructor)
+            User newUser = new User(
+                    userId,
+                    user.getUsername(),
+                    user.getPassword(),
+                    user.getEmail(),
+                    user.getAge(),
+                    user.getHeight(),
+                    user.getWeight(),
+                    user.getWorkoutPreference(),
+                    user.getInjuryInfo()
+            );
+
+            users.add(newUser);
+            fileManager.saveData(USERS_FILE, users);
+            return true;
+        } catch (Exception e) {
             System.out.println("Error creating user: " + e.getMessage());
             return false;
         }
     }
-    public boolean updateUser(User user) {
-        try (Connection connection = DatabaseManager.getInstance().getConnection()) {
-            String sql = "UPDATE users SET email = ?, age = ?, height = ?, weight = ?, " +
-                    "workoutPreference = ?, injuryInfo = ? WHERE userID = ?";
-            PreparedStatement statement = connection.prepareStatement(sql);
-            statement.setString(1, user.getEmail());
-            statement.setInt(2, user.getAge());
-            statement.setDouble(3, user.getHeight());
-            statement.setDouble(4, user.getWeight());
-            statement.setString(5, user.getWorkoutPreference());
-            statement.setString(6, user.getInjuryInfo());
-            statement.setInt(7, user.getUserID());
 
-            return statement.executeUpdate() > 0;
-        } catch (SQLException e) {
+    public User getUserByEmail(String email) {
+        List<User> users = getAllUsers();
+        return users.stream()
+                .filter(u -> u.getEmail().equals(email))
+                .findFirst()
+                .orElse(null);
+    }
+
+    public User getUserByUserId(int userId) {
+        List<User> users = getAllUsers();
+        return users.stream()
+                .filter(u -> u.getUserID() == userId)
+                .findFirst()
+                .orElse(null);
+    }
+
+    public boolean updateUser(User user) {
+        try {
+            List<User> users = getAllUsers();
+            for (int i = 0; i < users.size(); i++) {
+                if (users.get(i).getUserID() == user.getUserID()) {
+                    users.set(i, user);
+                    fileManager.saveData(USERS_FILE, users);
+                    return true;
+                }
+            }
+            return false;
+        } catch (Exception e) {
             System.out.println("Error updating user: " + e.getMessage());
             return false;
         }
     }
-    public User getUserByUserId(int userId) {
-        try (Connection connection = DatabaseManager.getInstance().getConnection()) {
-            String sql = "SELECT * FROM users WHERE userID = ?";
-            PreparedStatement statement = connection.prepareStatement(sql);
-            statement.setInt(1, userId);
-            ResultSet resultSet = statement.executeQuery();
 
-            if (resultSet.next()) {
-                return loadUserFromResultSet(resultSet);
-            }
-        } catch (SQLException e) {
-            System.out.println("Error retrieving user by ID: " + e.getMessage());
-        }
-        return null;
-    }
-
-    public User getUserByEmail(String email) {
-        try (Connection connection = DatabaseManager.getInstance().getConnection()) {
-            String sql = "SELECT * FROM users WHERE email = ?";
-            PreparedStatement statement = connection.prepareStatement(sql);
-            statement.setString(1, email);
-            ResultSet resultSet = statement.executeQuery();
-
-            if (resultSet.next()) {
-                return loadUserFromResultSet(resultSet);
-            }
-        } catch (SQLException e) {
-            System.out.println("Error retrieving user by email: " + e.getMessage());
-        }
-        return null;
+    private List<User> getAllUsers() {
+        List<User> users = fileManager.loadList(USERS_FILE, User[].class);
+        return users != null ? users : new ArrayList<>();
     }
 
     public String getInjuryInfo(int userId) {
-        try (Connection connection = DatabaseManager.getInstance().getConnection()) {
-            String sql = "SELECT wt.injuryInfo FROM user_workout_plans uwp " +
-                    "JOIN workout_templates wt ON uwp.templateID = wt.templateID " +
-                    "WHERE uwp.userID = ? AND uwp.isActive = 1";
-            PreparedStatement statement = connection.prepareStatement(sql);
-            statement.setInt(1, userId);
-            ResultSet resultSet = statement.executeQuery();
-
-            if (resultSet.next()) {
-                return resultSet.getString("injuryInfo");
-            }
-        } catch (SQLException e) {
-            System.out.println("Error retrieving injury info: " + e.getMessage());
-        }
-        return null;
-    }
-
-    private User loadUserFromResultSet(ResultSet resultSet) throws SQLException {
-        return new User(
-                resultSet.getInt("userID"),
-                resultSet.getString("username"),
-                resultSet.getString("password"),
-                resultSet.getString("email"),
-                resultSet.getInt("age"),
-                resultSet.getDouble("height"),
-                resultSet.getDouble("weight"),
-                resultSet.getString("workoutPreference"),
-                resultSet.getString("injuryInfo")
-        );
+        User user = getUserByUserId(userId);
+        return user != null ? user.getInjuryInfo() : null;
     }
 }

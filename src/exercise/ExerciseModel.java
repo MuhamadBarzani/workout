@@ -1,80 +1,69 @@
 package exercise;
+import server.FileManager;
 
-import server.DatabaseManager;
-import java.sql.*;
 import java.util.*;
+import java.util.stream.Collectors;
 
 public class ExerciseModel {
+    private static final String EXERCISES_FILE = "exercises.json";
+    private static final String EXERCISE_COUNTER = "exercise_counter.txt";
+    private final FileManager fileManager;
+
+    public ExerciseModel() {
+        this.fileManager = FileManager.getInstance();
+    }
+
     public List<Exercise> getAllExercises() {
-        List<Exercise> exercises = new ArrayList<>();
-
-        try (Connection conn = DatabaseManager.getInstance().getConnection();
-             PreparedStatement stmt = conn.prepareStatement("SELECT * FROM exercises");
-             ResultSet rs = stmt.executeQuery()) {
-
-            while (rs.next()) {
-                exercises.add(new Exercise(
-                        rs.getInt("exerciseID"),
-                        rs.getString("exerciseName"),
-                        rs.getString("type"),
-                        rs.getString("bodyTargeted"),
-                        rs.getBoolean("equipmentNeeded"),
-                        rs.getString("description")
-                ));
-            }
-        } catch (SQLException e) {
-            System.err.println("Database error retrieving exercises: " + e.getMessage());
-        }
-
-        return exercises;
+        List<Exercise> exercises = fileManager.loadList(EXERCISES_FILE, Exercise[].class);
+        return exercises != null ? exercises : new ArrayList<>();
     }
 
-    public List<Exercise> generateWorkout(Connection existingConnection, String bodyTarget,
-                                          boolean hasEquipment, int exerciseCount) {
-        List<Exercise> workout = new ArrayList<>();
-        String query = "SELECT * FROM exercises WHERE bodyTargeted = ? AND equipmentNeeded <= ? " +
-                "ORDER BY RAND() LIMIT ?";
+    public List<Exercise> generateWorkout(String bodyTarget, boolean hasEquipment, int exerciseCount) {
+        List<Exercise> exercises = getAllExercises();
 
-        boolean useExistingConnection = (existingConnection != null);
-        Connection connection = null;
+        // Filter exercises based on criteria
+        List<Exercise> filtered = exercises.stream()
+                .filter(e -> e.getBodyTargeted().equalsIgnoreCase(bodyTarget))
+                .filter(e -> !e.isEquipmentNeeded() || hasEquipment)
+                .collect(Collectors.toList());
 
+        // Randomly select exercises
+        if (filtered.size() <= exerciseCount) {
+            return filtered;
+        }
+
+        // Shuffle and select required number of exercises
+        Collections.shuffle(filtered);
+        return filtered.subList(0, exerciseCount);
+    }
+
+    public boolean addExercise(Exercise exercise) {
         try {
-            // Use existing connection if provided, otherwise create new one
-            connection = useExistingConnection ? existingConnection :
-                    DatabaseManager.getInstance().getConnection();
+            List<Exercise> exercises = getAllExercises();
+            int id = fileManager.getNextId(EXERCISE_COUNTER);
 
-            try (PreparedStatement stmt = connection.prepareStatement(query)) {
-                stmt.setString(1, bodyTarget);
-                stmt.setBoolean(2, hasEquipment);
-                stmt.setInt(3, exerciseCount);
+            Exercise newExercise = new Exercise(
+                    id,
+                    exercise.getExerciseName(),
+                    exercise.getType(),
+                    exercise.getBodyTargeted(),
+                    exercise.isEquipmentNeeded(),
+                    exercise.getDescription()
+            );
 
-                try (ResultSet rs = stmt.executeQuery()) {
-                    while (rs.next()) {
-                        Exercise exercise = new Exercise(
-                                rs.getInt("exerciseID"),
-                                rs.getString("exerciseName"),
-                                rs.getString("type"),
-                                rs.getString("bodyTargeted"),
-                                rs.getBoolean("equipmentNeeded"),
-                                rs.getString("description")
-                        );
-                        workout.add(exercise);
-                    }
-                }
-            }
-        } catch (SQLException e) {
-            e.printStackTrace();
-        } finally {
-            // Only close the connection if we created it
-            if (!useExistingConnection && connection != null) {
-                try {
-                    connection.close();
-                } catch (SQLException e) {
-                    e.printStackTrace();
-                }
-            }
+            exercises.add(newExercise);
+            fileManager.saveData(EXERCISES_FILE, exercises);
+            return true;
+        } catch (Exception e) {
+            System.out.println("Error adding exercise: " + e.getMessage());
+            return false;
         }
-        return workout;
     }
 
+    public Exercise getExerciseById(int exerciseId) {
+        return getAllExercises().stream()
+                .filter(e -> e.getExerciseID() == exerciseId)
+                .findFirst()
+                .orElse(null);
+    }
 }
