@@ -18,4 +18,20 @@ public class OrderSupplement {
         this.supplementID = supplementID;
         this.quantityOrdered = quantityOrdered;
     }
+
+    public int getOrderID() {
+        return orderID;
+    }
+
+    public void setOrderID(int orderID) {
+        this.orderID = orderID;
+    }
+
+    public void setSupplementID(int supplementID) {
+        this.supplementID = supplementID;
+    }
+
+    public void setQuantityOrdered(int quantityOrdered) {
+        this.quantityOrdered = quantityOrdered;
+    }
 }

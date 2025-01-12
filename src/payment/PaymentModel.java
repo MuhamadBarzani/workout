@@ -1,68 +1,68 @@
 package payment;
 
-import server.DatabaseManager;
-import java.sql.*;
+import server.FileManager;
 import java.util.ArrayList;
 import java.util.List;
 
 public class PaymentModel {
-    private static final String INSERT_PAYMENT = "INSERT INTO paymentmethods (userID, orderID, paymentType, paymentDate) VALUES (?, ?, ?, ?)";
-    private static final String DELETE_PAYMENT = "DELETE FROM paymentmethods WHERE paymentID = ?";
-    private static final String SELECT_USER_PAYMENTS = "SELECT * FROM paymentmethods WHERE userID = ?";
+    private static final String PAYMENTS_FILE = "payments.json";
+    private static final String PAYMENT_COUNTER = "payment_counter.txt";
+    private final FileManager fileManager;
+
+    public PaymentModel() {
+        this.fileManager = FileManager.getInstance();
+    }
 
     public boolean addPayment(PaymentMethod payment) {
-        try (Connection conn = DatabaseManager.getInstance().getConnection();
-             PreparedStatement stmt = conn.prepareStatement(INSERT_PAYMENT)) {
+        try {
+            List<PaymentMethod> payments = getAllPayments();
 
-            stmt.setInt(1, payment.getUserID());
-            stmt.setInt(2, payment.getOrderID());
-            stmt.setString(3, payment.getPaymentType());
-            stmt.setTimestamp(4, Timestamp.valueOf(payment.getPaymentDate()));
+            // Generate new payment ID
+            int paymentId = fileManager.getNextId(PAYMENT_COUNTER);
 
-            return stmt.executeUpdate() > 0;
-        } catch (SQLException e) {
-            System.out.println("Detailed error processing payment: " + e.getMessage());
-            e.printStackTrace();
+            // Create new payment with generated ID
+            PaymentMethod newPayment = new PaymentMethod(
+                    paymentId,
+                    payment.getUserID(),
+                    payment.getOrderID(),
+                    payment.getPaymentType(),
+                    payment.getPaymentDate()
+            );
+
+            payments.add(newPayment);
+            fileManager.saveData(PAYMENTS_FILE, payments);
+            return true;
+        } catch (Exception e) {
+            System.out.println("Error processing payment: " + e.getMessage());
             return false;
         }
     }
 
     public boolean removePayment(int paymentID) {
-        try (Connection conn = DatabaseManager.getInstance().getConnection();
-             PreparedStatement stmt = conn.prepareStatement(DELETE_PAYMENT)) {
+        try {
+            List<PaymentMethod> payments = getAllPayments();
+            boolean removed = payments.removeIf(p -> p.getPaymentID() == paymentID);
 
-            stmt.setInt(1, paymentID);
-            return stmt.executeUpdate() > 0;
-        } catch (SQLException e) {
+            if (removed) {
+                fileManager.saveData(PAYMENTS_FILE, payments);
+                return true;
+            }
+            return false;
+        } catch (Exception e) {
             System.out.println("Error removing payment: " + e.getMessage());
             return false;
         }
     }
 
     public List<PaymentMethod> getAllPaymentsForUser(int userID) {
-        List<PaymentMethod> payments = new ArrayList<>();
-        try (Connection conn = DatabaseManager.getInstance().getConnection();
-             PreparedStatement stmt = conn.prepareStatement(SELECT_USER_PAYMENTS)) {
-
-            stmt.setInt(1, userID);
-            ResultSet rs = stmt.executeQuery();
-
-            while (rs.next()) {
-                payments.add(createPaymentFromResultSet(rs));
-            }
-        } catch (SQLException e) {
-            System.out.println("Error retrieving payments: " + e.getMessage());
-        }
-        return payments;
+        List<PaymentMethod> allPayments = getAllPayments();
+        return allPayments.stream()
+                .filter(payment -> payment.getUserID() == userID)
+                .toList();
     }
 
-    private PaymentMethod createPaymentFromResultSet(ResultSet rs) throws SQLException {
-        return new PaymentMethod(
-                rs.getInt("paymentID"),
-                rs.getInt("userID"),
-                rs.getInt("orderID"),
-                rs.getString("paymentType"),
-                rs.getTimestamp("paymentDate").toLocalDateTime()
-        );
+    private List<PaymentMethod> getAllPayments() {
+        List<PaymentMethod> payments = fileManager.loadList(PAYMENTS_FILE, PaymentMethod[].class);
+        return payments != null ? payments : new ArrayList<>();
     }
 }

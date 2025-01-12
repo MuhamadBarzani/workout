@@ -19,6 +19,30 @@ public class Order {
         this.dateCreated = dateCreated;
     }
 
+    public void setUserID(int userID) {
+        this.userID = userID;
+    }
+
+    public void setOrderID(int orderID) {
+        this.orderID = orderID;
+    }
+
+    public void setTotalPrice(double totalPrice) {
+        this.totalPrice = totalPrice;
+    }
+
+    public void setStatus(String status) {
+        this.status = status;
+    }
+
+    public void setDeliveryLocation(String deliveryLocation) {
+        this.deliveryLocation = deliveryLocation;
+    }
+
+    public void setDateCreated(LocalDateTime dateCreated) {
+        this.dateCreated = dateCreated;
+    }
+
     public int getOrderID() {
         return orderID;
     }

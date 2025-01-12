@@ -19,6 +19,14 @@ public class WorkoutPlan implements Serializable {
 
     // Getters and setters
 
+    public int getPlanId() {
+        return planId;
+    }
+
+    public int getUserId() {
+        return userId;
+    }
+
     public void setPlanId(int planId) {
         this.planId = planId;
     }
